@@ -84,6 +84,8 @@ async def put_bot_user(bot_id: int, user_dto: UserUpdateDto, session: Session = 
         session.refresh(user)
     return user
 
+@app.get("/api/bot/{bot_id}/qr")
+async def get_user_qr(bot_id: int, session: Session = Depends(get_session)):
 
 @app.get("/hello/{name}")
 async def say_hello(name: str):
