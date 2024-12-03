@@ -1,7 +1,9 @@
 from fastapi import APIRouter
 from starlette.requests import Request
 
-router = APIRouter()
+router = APIRouter(
+    prefix='/api/users',
+)
 
 
 @router.get("/api/user")
