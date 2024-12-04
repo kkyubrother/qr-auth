@@ -17,7 +17,7 @@ class User(BaseModel):
 class UserCreateRequest(BaseModel):
     username: str = Field(title="이름", pattern=r'[가-힣]{2,}')
     department: str = Field(title='부서', default='')
-    tel: str = Field(title='전화번호', pattern= r'^01[016789]-?\d{3,4}-?\d{4}$', examples=['010-0000-0000'])
+    tel: str = Field(title='전화번호', pattern=r'^01[016789]-?\d{3,4}-?\d{4}$', examples=['010-0000-0000'])
     duty: str = Field(title='직책', default='')
     lunch: bool = Field(title='점심', default=False)
     dinner: bool = Field(title='저녁', default=False)
