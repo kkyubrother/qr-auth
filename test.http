@@ -82,3 +82,13 @@ GET http://localhost:8000/api/bot/1/qr
         client.assert(response.status === 200, "Response status is not 404");
     });
 %}
+
+
+### QR 생성
+GET http://localhost:8000/api/bot/1/qr
+
+> {%
+    client.test("없는 사용자 검색", function () {
+        client.assert(response.status === 200, "Response status is not 404");
+    });
+%}

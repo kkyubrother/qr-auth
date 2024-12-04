@@ -121,7 +121,8 @@ async def post_user(user_dto: User, session: Session = Depends(get_session)):
 
 
 @app.put("/api/user/{user_id}")
-async def put_user(user_id: int, user_dto: User, session: Session = Depends(get_session)):
+async def put_user(user_id: str, user_dto: User, session: Session = Depends(get_session)):
+    user_id = int(user_id)
     statement = select(User).where(User.id == user_id)
     results = session.exec(statement)
     user = results.one_or_none()
@@ -146,14 +147,15 @@ async def put_user(user_id: int, user_dto: User, session: Session = Depends(get_
 
 
 @app.get("/api/bot/{bot_id}/qr")
-async def get_user_qr(bot_id: int, session: Session = Depends(get_session)):
+async def get_user_qr(bot_id: str, session: Session = Depends(get_session)):
+    bot_id = int(bot_id)
     user = session.exec(select(User).where(User.bot_id == bot_id)).one_or_none()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     code = "".join([random.choice(string.ascii_letters + string.digits) for _ in range(10)])
-    qr = Qr(code=code, user_id=user.id, created_at=datetime.datetime.now(datetime.timezone.utc), expired_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=1))
+    qr = Qr(code=code, user_id=user.id, created_at=datetime.datetime.now(datetime.timezone.utc))
     session.add(qr)
     user.qr_list.append(qr)
     session.commit()
@@ -163,20 +165,22 @@ async def get_user_qr(bot_id: int, session: Session = Depends(get_session)):
 
 
 @app.get("/api/qr/{code}")
-async def get_user_qr(bot_id: int, session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.bot_id == bot_id)).one_or_none()
+async def get_qr(code: str, session: Session = Depends(get_session)):
+    qr = session.exec(
+        select(Qr)
+        .where(Qr.code == code)
+        .where(Qr.created_at <= datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1))
+    ).one_or_none()
 
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not qr:
+        raise HTTPException(status_code=404, detail="Qr not found")
 
-    code = "".join([random.choice(string.ascii_letters + string.digits) for _ in range(10)])
-    qr = Qr(code=code, user_id=user.id, created_at=datetime.datetime.now(datetime.timezone.utc), expired_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=1))
+    qr.authed_at = datetime.datetime.now(datetime.timezone.utc)
     session.add(qr)
-    user.qr_list.append(qr)
     session.commit()
     session.refresh(qr)
 
-    return qr
+    return qr.user
 
 
 @app.get("/hello/{name}")
