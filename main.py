@@ -67,13 +67,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# @app.on_event("startup")
-# async def startup():
-#     create_db_and_tables()
-#     print("created")
-#     yield
-
-
 @app.get("/api/bot/{bot_id}")
 async def get_bot_user(bot_id: int, session: Session = Depends(get_session)):
     user = session.get(User, bot_id)
@@ -154,6 +147,16 @@ async def get_user_qr(bot_id: str, session: Session = Depends(get_session)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    now_time = datetime.datetime.now(datetime.timezone.utc)
+    is_lunch_time = 11 <= (now_time.hour + 9) < 13
+    is_dinner_time = 17 <= (now_time.hour + 9) < 19
+
+    if is_lunch_time and not user.is_lunch:
+        raise HTTPException(status_code=403, detail="Not lunch target")
+
+    if is_dinner_time and not user.is_dinner:
+        raise HTTPException(status_code=403, detail="Not lunch target")
+
     code = "".join([random.choice(string.ascii_letters + string.digits) for _ in range(10)])
     qr = Qr(code=code, user_id=user.id, created_at=datetime.datetime.now(datetime.timezone.utc))
     session.add(qr)
@@ -169,7 +172,8 @@ async def get_qr(code: str, session: Session = Depends(get_session)):
     qr = session.exec(
         select(Qr)
         .where(Qr.code == code)
-        .where(Qr.created_at <= datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1))
+        .where(Qr.authed_at is None)
+        .where(Qr.created_at >= datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1))
     ).one_or_none()
 
     if not qr:
