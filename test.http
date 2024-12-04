@@ -85,7 +85,7 @@ GET http://localhost:8000/api/bot/1/qr
 
 
 ### QR 생성
-GET http://localhost:8000/api/qr/12KbMqGmmZ
+GET http://localhost:8000/api/qr/PlRXOIljM7
 
 > {%
     client.test("없는 사용자 검색", function () {

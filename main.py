@@ -159,7 +159,7 @@ async def get_user_qr(bot_id: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=403, detail="Not dinner target")
 
     latest_qr = user.qr_list[-1]
-    if latest_qr.authed_at is not None and latest_qr.authed_at > (now_time + datetime.timedelta(hours=2)):
+    if latest_qr.authed_at is not None and (latest_qr.authed_at.t) > (now_time + datetime.timedelta(hours=2)):
         raise HTTPException(status_code=403, detail="Already Authed")
 
     code = "".join([random.choice(string.ascii_letters + string.digits) for _ in range(10)])
@@ -177,7 +177,7 @@ async def get_qr(code: str, session: Session = Depends(get_session)):
     qr = session.exec(
         select(Qr)
         .where(Qr.code == code)
-        .where(Qr.authed_at is None)
+        .where(Qr.authed_at == None)
         .where(Qr.created_at >= (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1)))
     ).one_or_none()
 
