@@ -139,6 +139,26 @@ async def put_user(user_id: str, user_dto: User, session: Session = Depends(get_
     return results.one()
 
 
+@app.delete("/api/user/{user_id}")
+async def put_user(user_id: str, session: Session = Depends(get_session)):
+    user_id = int(user_id)
+    statement = select(User).where(User.id == user_id)
+    results = session.exec(statement)
+    user = results.one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    user.name = f"DEL_{user.name}_{datetime.datetime.now(datetime.timezone.utc)}"
+    user.is_lunch = False
+    user.is_dinner = False
+    user.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    session.add(user)
+    session.commit()
+
+
+
+
 @app.get("/api/bot/{bot_id}/qr")
 async def get_user_qr(bot_id: str, session: Session = Depends(get_session)):
     bot_id = int(bot_id)
@@ -159,7 +179,7 @@ async def get_user_qr(bot_id: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=403, detail="Not dinner target")
 
     latest_qr = user.qr_list[-1]
-    if latest_qr.authed_at is not None and (latest_qr.authed_at.t) > (now_time + datetime.timedelta(hours=2)):
+    if latest_qr.authed_at is not None and (latest_qr.authed_at) > (now_time + datetime.timedelta(hours=2)):
         raise HTTPException(status_code=403, detail="Already Authed")
 
     code = "".join([random.choice(string.ascii_letters + string.digits) for _ in range(10)])
