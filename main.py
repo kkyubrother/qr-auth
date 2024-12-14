@@ -1,3 +1,4 @@
+import os
 import string
 import random
 import datetime
@@ -9,6 +10,102 @@ from fastapi import HTTPException
 from sqlmodel import select
 from sqlmodel import Field, SQLModel, create_engine, Relationship
 from sqlmodel import Session
+
+import requests
+from PIL import Image, ImageDraw, ImageFont
+import re
+from io import BytesIO
+
+
+from telegram import Bot
+
+
+TELEGRAM_BOT_TOKEN = "6072782752:AAHYSDVBBYmS76yql6xU9FpI-18KZH0-Bfw"
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+# font_path = "/mnt/data/NanumGothic.ttf"  # 업로드된 폰트 파일 경로
+font_path = os.path.join(os.getcwd(), 'static', 'fonts', 'NanumGothic.ttf')  # 업로드된 폰트 파일 경로
+
+# Telegram Bot Token
+# TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN"
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
+
+
+async def generate_user_image_korean_to_bytes(name, department, duty, meal, is_target):
+    # 이미지 크기 및 배경 설정
+    img_width, img_height = 500, 400
+    background_color = "#f0f8ff"  # 밝은 파란색
+    text_color = "#000000"  # 검정색
+    highlight_color = "#008000" if is_target else "#ff0000"  # 초록색(대상자) 또는 빨간색(비대상자)
+
+    # 이모지 추가
+    # emoji = "✔️" if is_target else "❌"
+    # emoji = "\u2714" if is_target else "\u274C"
+    emoji = ""
+
+    # 인증 시간
+    timestamp = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=9)).strftime("%Y-%m-%d %H:%M:%S")
+
+    # 이미지 생성
+    img = Image.new("RGB", (img_width, img_height), background_color)
+    draw = ImageDraw.Draw(img)
+
+    # 폰트 설정 (업로드된 한글 폰트 경로 사용)
+    try:
+        font = ImageFont.truetype(font_path, size=24)
+        title_font = ImageFont.truetype(font_path, size=28)
+        highlight_font = ImageFont.truetype(font_path, size=30)
+    except IOError:
+        return None, "업로드된 폰트를 불러오지 못했습니다. 경로를 확인하세요."
+
+    # 제목 텍스트
+    title = "큐알 인증"
+    # title_width, title_height = draw.textsize(title, font=title_font)
+
+    bbox = draw.textbbox((0, 0), title, font=title_font)
+    title_width, title_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(((img_width - title_width) / 2, 20), title, fill="#4682b4", font=title_font)
+
+    # 본문 텍스트
+    text = (
+        f"이름: {name}\n"
+        f"부서: {department}\n"
+        f"직책: {duty}\n"
+        f"식사: {'점심' if meal == 'lunch' else '저녁'}\n"
+        f"인증 시간: {timestamp}"
+    )
+    text_x, text_y = 50, 80
+    draw.multiline_text((text_x, text_y), text, fill=text_color, font=font, spacing=10)
+
+    # 대상자 여부 강조 텍스트
+    target_text = f"대상자 여부: {emoji} {'예' if is_target else '아니오'}"
+    draw.text((text_x, text_y + 200), target_text, fill=highlight_color, font=highlight_font)
+
+    # 이미지를 BytesIO에 저장
+    img_bytes = BytesIO()
+    img.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+    return img_bytes, None
+
+async def send_qr_to_user(chat_id, name, department, duty, meal, is_target):
+    # QR 이미지 생성
+    img_bytes, error = await generate_user_image_korean_to_bytes(
+        name=name,
+        department=department,
+        duty=duty,
+        meal=meal,
+        is_target=is_target
+    )
+
+    if error:
+        print(f"Error generating image: {error}")
+        return
+
+    # Telegram을 통해 이미지 전송
+    try:
+        await bot.send_photo(chat_id=chat_id, photo=img_bytes, caption=f"안녕하세요 {name}님! 아래는 인증 QR 정보입니다.")
+        print("Image sent successfully!")
+    except Exception as e:
+        print(f"Failed to send image: {e}")
 
 
 class User(SQLModel, table=True):
@@ -157,8 +254,6 @@ async def put_user(user_id: str, session: Session = Depends(get_session)):
     session.commit()
 
 
-
-
 @app.get("/api/bot/{bot_id}/qr")
 async def get_user_qr(bot_id: str, session: Session = Depends(get_session)):
     bot_id = int(bot_id)
@@ -168,7 +263,6 @@ async def get_user_qr(bot_id: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="User not found")
 
     now_time = datetime.datetime.now(datetime.timezone.utc)
-    print(now_time)
     is_lunch_time = 11 <= (now_time + datetime.timedelta(hours=9)).hour < 13
     is_dinner_time = 17 <= (now_time + datetime.timedelta(hours=9)).hour < 19
 
@@ -178,9 +272,15 @@ async def get_user_qr(bot_id: str, session: Session = Depends(get_session)):
     if is_dinner_time and not user.is_dinner:
         raise HTTPException(status_code=403, detail="Not dinner target")
 
-    latest_qr = user.qr_list[-1]
-    if latest_qr.authed_at is not None and (latest_qr.authed_at) > (now_time + datetime.timedelta(hours=2)):
-        raise HTTPException(status_code=403, detail="Already Authed")
+    if len(user.qr_list) > 0:
+        latest_qr = user.qr_list[-1]
+
+        # created_at 필드가 offset-naive인 경우 UTC-aware로 변환
+        if latest_qr.authed_at and latest_qr.authed_at.tzinfo is None:
+            latest_qr.authed_at = latest_qr.authed_at.replace(tzinfo=datetime.timezone.utc)
+
+        if latest_qr.authed_at is not None and latest_qr.authed_at > (now_time + datetime.timedelta(hours=2)):
+            raise HTTPException(status_code=403, detail="Already Authed")
 
     code = "".join([random.choice(string.ascii_letters + string.digits) for _ in range(10)])
     qr = Qr(code=code, user_id=user.id, created_at=datetime.datetime.now(datetime.timezone.utc))
@@ -209,7 +309,35 @@ async def get_qr(code: str, session: Session = Depends(get_session)):
     session.commit()
     session.refresh(qr)
 
-    return qr.user
+
+    user = qr.user
+    if user and user.bot_id:
+        now_time = datetime.datetime.now(datetime.timezone.utc)
+        is_lunch_time = 11 <= (now_time + datetime.timedelta(hours=9)).hour < 13
+        is_dinner_time = 17 <= (now_time + datetime.timedelta(hours=9)).hour < 19
+
+        # Telegram API 호출
+        message = (
+            f"✅ 인증 성공\n"
+            f"사용자: {user.name}\n"
+            f"전화번호: {user.tel}\n"
+            f"부서: {user.department}\n"
+            f"직책: {user.duty}"
+        )
+        requests.post(
+            TELEGRAM_API_URL,
+            json={"chat_id": user.bot_id, "text": message}
+        )
+        await send_qr_to_user(
+            user.bot_id,
+            user.name,
+            user.department,
+            user.duty,
+            'lunch' if is_lunch_time else 'dinner',
+            user.is_lunch if is_lunch_time else user.is_dinner
+        )
+
+    return {"status": "success", "message": "QR authenticated successfully"}
 
 
 @app.get("/hello/{name}")

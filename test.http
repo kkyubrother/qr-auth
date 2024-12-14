@@ -21,8 +21,8 @@ POST http://localhost:8000/api/user
 Content-Type: application/json
 
 {
-  "name": "홍길동",
-  "tel": "010-0000-0000",
+  "name": "김규형",
+  "tel": "010-3038-8121",
   "department": "NCT",
   "duty": "DEV",
   "is_lunch": true,
@@ -57,7 +57,7 @@ Content-Type: application/json
 
 
 ### 사용자 등록
-PUT http://localhost:8000/api/bot/1
+PUT http://localhost:8000/api/bot/145842735
 Content-Type: application/json
 
 {
@@ -73,22 +73,35 @@ Content-Type: application/json
     });
 %}
 
-
 ### QR 생성
-GET http://localhost:8000/api/bot/1/qr
+GET http://localhost:8000/api/bot/145842735/qr
 
 > {%
-    client.test("없는 사용자 검색", function () {
-        client.assert(response.status === 200, "Response status is not 404");
+
+    // 응답에서 "code" 값을 추출하고 변수로 저장
+if (typeof response.body === 'string') {
+    const jsonResponse = JSON.parse(response.body);
+    client.global.set("qrCode", jsonResponse.code);
+    client.test("QR 생성 성공", function () {
+        client.assert(response.status === 200, "Response status is not 200");
+        client.assert(jsonResponse.code !== undefined, "QR 코드가 응답에 없습니다.");
     });
+} else {
+    client.global.set("qrCode", response.body.code);
+
+    client.test("QR 생성 성공", function () {
+        client.assert(response.status === 200, "Response status is not 200");
+        client.assert(response.body.code !== undefined, "QR 코드가 응답에 없습니다.");
+    });
+}
 %}
 
-
-### QR 생성
-GET http://localhost:8000/api/qr/PlRXOIljM7
+### QR 인증
+GET http://localhost:8000/api/qr/{{qrCode}}
 
 > {%
-    client.test("없는 사용자 검색", function () {
-        client.assert(response.status === 200, "Response status is not 404");
+    // 저장된 QR 코드로 인증 요청 테스트
+    client.test("QR 인증 성공", function () {
+        client.assert(response.status === 200, "Response status is not 200");
     });
 %}
