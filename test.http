@@ -97,7 +97,7 @@ if (typeof response.body === 'string') {
 %}
 
 ### QR 인증
-GET http://localhost:8000/api/qr/{{qrCode}}
+POST http://localhost:8000/api/qr/{{qrCode}}
 
 > {%
     // 저장된 QR 코드로 인증 요청 테스트

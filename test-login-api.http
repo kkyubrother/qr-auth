@@ -1,0 +1,37 @@
+### 1. 로그인 및 토큰 요청
+POST http://localhost:8000/token
+Content-Type: application/x-www-form-urlencoded
+
+username=default_id&password=default_password
+
+> {%
+    client.test("Token is returned", function() {
+        client.global.set("access_token", response.body.access_token);
+    });
+%}
+
+### 2. 보호된 API에 접근 (자동으로 발급된 토큰 사용)
+GET http://localhost:8000/api/protected
+Authorization: Bearer {{access_token}}
+
+### 3. 예제 API 호출
+GET http://localhost:8000/api/example
+Authorization: Bearer {{access_token}}
+
+### 4. 토큰 없이 보호된 API 접근
+GET http://localhost:8000/api/protected
+
+> {%
+    client.test("Unauthorized access without token", function() {
+        client.assert(response.status === 401, "Expected status 401 for unauthorized access");
+    });
+%}
+
+### 5. 토큰 없이 예제 API 접근
+GET http://localhost:8000/api/example
+
+> {%
+    client.test("Unauthorized access to example API without token", function() {
+        client.assert(response.status === 401, "Expected status 401 for unauthorized access");
+    });
+%}
